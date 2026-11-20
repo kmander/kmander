@@ -1,6 +1,5 @@
-// Builds the stats card shown on the GitHub profile (assets/stats-dark.svg and assets/stats-light.svg).
-// Runs daily from .github/workflows/update-stats.yml.
-// Only counts are written. Private repo names never leave this script.
+// Builds the stats card on the GitHub profile (assets/stats-dark.svg and assets/stats-light.svg).
+// Runs daily from .github/workflows/update-stats.yml. Only counts are written, never repo names.
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 
@@ -23,40 +22,27 @@ async function gql(query, variables = {}) {
     body: JSON.stringify({ query, variables }),
   });
   const json = await res.json();
-  if (!res.ok || json.errors) {
-    throw new Error(`GitHub API error: ${JSON.stringify(json.errors || json)}`);
-  }
+  if (!res.ok || json.errors) throw new Error(`GitHub API error: ${JSON.stringify(json.errors || json)}`);
   return json.data;
 }
 
-const pad = (n) => String(n).padStart(2, "0");
-
-async function fetchMonthlyCommits(createdAt, now) {
-  const firstYear = new Date(createdAt).getUTCFullYear();
-  const lastYear = now.getUTCFullYear();
-  const monthly = [];
-  for (let y = firstYear; y <= lastYear; y++) {
-    const parts = [];
-    const keys = [];
-    for (let m = 1; m <= 12; m++) {
-      const from = new Date(Date.UTC(y, m - 1, 1));
-      if (from > now) break;
-      let to = new Date(Date.UTC(y, m, 1) - 1000);
-      if (to > now) to = now;
-      keys.push(`${y}-${pad(m)}`);
-      parts.push(
-        `m${m}: contributionsCollection(from: "${from.toISOString()}", to: "${to.toISOString()}") { totalCommitContributions restrictedContributionsCount }`
-      );
-    }
-    const data = await gql(`query($login: String!) { user(login: $login) { ${parts.join("\n")} } }`, {
-      login: LOGIN,
-    });
-    keys.forEach((month, i) => {
-      const c = data.user[`m${i + 1}`];
-      monthly.push({ month, commits: c.totalCommitContributions + c.restrictedContributionsCount });
-    });
+// Commits per calendar year, private ones included.
+async function fetchYearlyCommits(createdAt, now) {
+  const years = [];
+  for (let y = new Date(createdAt).getUTCFullYear(); y <= now.getUTCFullYear(); y++) {
+    const to = y === now.getUTCFullYear() ? now.toISOString() : `${y}-12-31T23:59:59Z`;
+    const d = await gql(
+      `query($login: String!, $from: DateTime!, $to: DateTime!) {
+        user(login: $login) {
+          contributionsCollection(from: $from, to: $to) { totalCommitContributions restrictedContributionsCount }
+        }
+      }`,
+      { login: LOGIN, from: `${y}-01-01T00:00:00Z`, to }
+    );
+    const c = d.user.contributionsCollection;
+    years.push({ year: y, commits: c.totalCommitContributions + c.restrictedContributionsCount });
   }
-  return monthly;
+  return years;
 }
 
 async function fetchUser() {
@@ -65,7 +51,6 @@ async function fetchUser() {
       user(login: $login) {
         createdAt
         contributionsCollection {
-          totalRepositoriesWithContributedCommits
           contributionCalendar { weeks { contributionDays { date contributionCount } } }
         }
       }
@@ -75,25 +60,28 @@ async function fetchUser() {
   return user;
 }
 
-async function fetchOrgRepos() {
+// Every repo in the org, plus the ones on the personal account.
+async function fetchRepos() {
   const repos = [];
-  let after = null;
-  do {
-    const data = await gql(
-      `query($org: String!, $after: String) {
-        organization(login: $org) {
-          repositories(first: 100, after: $after) {
-            pageInfo { hasNextPage endCursor }
-            nodes { isPrivate isArchived pushedAt }
+  for (const [owner, field] of [[ORG, "organization"], [LOGIN, "user"]]) {
+    let after = null;
+    do {
+      const data = await gql(
+        `query($owner: String!, $after: String) {
+          ${field}(login: $owner) {
+            repositories(first: 100, after: $after, ownerAffiliations: OWNER) {
+              pageInfo { hasNextPage endCursor }
+              nodes { isPrivate }
+            }
           }
-        }
-      }`,
-      { org: ORG, after }
-    );
-    const page = data.organization.repositories;
-    repos.push(...page.nodes);
-    after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
-  } while (after);
+        }`,
+        { owner, after }
+      );
+      const page = data[field].repositories;
+      repos.push(...page.nodes);
+      after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
+    } while (after);
+  }
   return repos;
 }
 
@@ -104,77 +92,49 @@ async function loadData(now) {
     process.exit(1);
   }
   const user = await fetchUser();
-  const [monthly, repos] = await Promise.all([fetchMonthlyCommits(user.createdAt, now), fetchOrgRepos()]);
+  const [yearly, repos] = await Promise.all([fetchYearlyCommits(user.createdAt, now), fetchRepos()]);
   const daily = user.contributionsCollection.contributionCalendar.weeks
     .flatMap((w) => w.contributionDays)
     .map((d) => ({ date: d.date, count: d.contributionCount }));
-  return {
-    monthly,
-    daily,
-    repos,
-    reposCommittedTo: user.contributionsCollection.totalRepositoriesWithContributedCommits,
-  };
+  return { yearly, daily, repos };
 }
 
-// ---------- Insights ----------
+// ---------- Numbers ----------
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const DAYS = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"];
 const fmt = (n) => Math.round(n).toLocaleString("en-GB");
-const monthLabel = (key) => `${MONTHS[Number(key.slice(5)) - 1]} ${key.slice(0, 4)}`;
 
-function insights(data, now) {
-  const { monthly, daily, repos } = data;
+function insights({ yearly, daily, repos }, now) {
+  // Skip empty years before the first commit.
+  const first = yearly.findIndex((y) => y.commits > 0);
+  const years = first === -1 ? yearly : yearly.slice(first);
+  const total = years.reduce((a, y) => a + y.commits, 0);
 
-  // Rolling 12 months = this month plus the 11 before it.
-  const recent = monthly.slice(-12);
-  const before = monthly.slice(0, -12);
-  const last12 = recent.reduce((a, m) => a + m.commits, 0);
-  const prior = before.reduce((a, m) => a + m.commits, 0);
-  const firstActive = monthly.find((m) => m.commits > 0) || monthly[0];
-  const priorFrom = Number(firstActive.month.slice(0, 4));
-  const priorTo = before.length ? Number(before[before.length - 1].month.slice(0, 4)) : priorFrom;
-  const priorYears = Math.max(1, priorTo - priorFrom + 1);
-  const best = monthly.reduce((a, m) => (m.commits > a.commits ? m : a), monthly[0]);
-
-  // Streaks from the daily calendar (last 12 months).
-  const days = daily.filter((d) => d.date <= now.toISOString().slice(0, 10));
-  let longest = 0;
-  let run = 0;
-  for (const d of days) {
-    run = d.count > 0 ? run + 1 : 0;
-    longest = Math.max(longest, run);
+  // The year things took off: first year with 500+ commits and at least double the best year before it.
+  let boom = null;
+  let bestSoFar = 0;
+  for (const y of years) {
+    if (y.commits >= 500 && y.commits >= bestSoFar * 2) {
+      boom = y.year;
+      break;
+    }
+    bestSoFar = Math.max(bestSoFar, y.commits);
   }
-  let current = 0;
+
+  // Current streak; nothing yet today doesn't break it.
+  const days = daily.filter((d) => d.date <= now.toISOString().slice(0, 10));
+  let streak = 0;
   let i = days.length - 1;
-  if (i >= 0 && days[i].count === 0) i--; // today not started yet doesn't break the streak
-  for (; i >= 0 && days[i].count > 0; i--) current++;
-
-  const byWeekday = [0, 0, 0, 0, 0, 0, 0];
-  for (const d of days) byWeekday[new Date(`${d.date}T00:00:00Z`).getUTCDay()] += d.count;
-  const busiestDay = DAYS[byWeekday.indexOf(Math.max(...byWeekday))];
-
-  const cutoff = new Date(now.getTime() - 30 * 86400000).toISOString();
-  const repoStats = {
-    total: repos.length,
-    private: repos.filter((r) => r.isPrivate).length,
-    public: repos.filter((r) => !r.isPrivate).length,
-    active30: repos.filter((r) => r.pushedAt && r.pushedAt >= cutoff).length,
-  };
+  if (i >= 0 && days[i].count === 0) i--;
+  for (; i >= 0 && days[i].count > 0; i--) streak++;
 
   return {
-    last12,
-    prior,
-    priorFrom,
-    priorTo,
-    priorYears,
-    multiple: prior ? last12 / prior : null,
-    best,
-    current,
-    longest,
-    busiestDay,
-    repoStats,
-    reposCommittedTo: data.reposCommittedTo,
+    years,
+    total,
+    boom,
+    streak,
+    thisYear: now.getUTCFullYear(),
+    priv: repos.filter((r) => r.isPrivate).length,
+    pub: repos.filter((r) => !r.isPrivate).length,
   };
 }
 
@@ -184,138 +144,107 @@ const THEMES = {
   dark: {
     bg: "#0d1117",
     border: "#30363d",
-    tile: "#161b22",
     text: "#f0f6fc",
     muted: "#9198a1",
-    faint: "#3d444d",
-    old: "#4b535d",
-    accentA: "#ff7a45",
-    accentB: "#ffc53d",
+    quiet: "#3a3f4b",
+    tiles: ["#2a1f3d", "#3a2418", "#16283a", "#16302a"],
+    hotA: "#ff5f8f",
+    hotB: "#ffb547",
   },
   light: {
     bg: "#ffffff",
     border: "#d1d9e0",
-    tile: "#f6f8fa",
     text: "#1f2328",
     muted: "#59636e",
-    faint: "#d1d9e0",
-    old: "#b7bfc8",
-    accentA: "#f0592b",
-    accentB: "#f5a524",
+    quiet: "#d9dce3",
+    tiles: ["#f3ecff", "#fff1e6", "#e8f3ff", "#e6f7ef"],
+    hotA: "#f43f74",
+    hotB: "#ff9f1c",
   },
 };
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-function renderSvg(data, ins, theme, now) {
+function renderSvg(ins, theme) {
   const t = THEMES[theme];
   const W = 880;
-  const H = 540;
-  const font = `font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif"`;
+  const H = 470;
   const out = [];
-
   out.push(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" ${font}>`,
-    `<defs><linearGradient id="hot" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="${t.accentA}"/><stop offset="1" stop-color="${t.accentB}"/></linearGradient></defs>`,
-    `<rect x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" rx="14" fill="${t.bg}" stroke="${t.border}"/>`
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif">`,
+    `<defs><linearGradient id="hot" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="${t.hotA}"/><stop offset="1" stop-color="${t.hotB}"/></linearGradient></defs>`,
+    `<rect x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" rx="20" fill="${t.bg}" stroke="${t.border}"/>`
   );
 
-  // Headline
-  out.push(
-    `<text x="32" y="54" font-size="30" font-weight="700" fill="${t.text}">Years of almost nothing. Then vibe coding.</text>`,
-    `<text x="32" y="84" font-size="16" fill="${t.muted}">Commits per month since ${ins.priorFrom}, public and private. AI writes the code, I keep shipping.</text>`
-  );
-
-  // Stat tiles
+  // Tiles
   const tiles = [
-    { big: fmt(ins.last12), label: ["commits in the", "last 12 months"], hot: true },
-    {
-      big: ins.multiple ? `${ins.multiple >= 10 ? fmt(ins.multiple) : ins.multiple.toFixed(1)}×` : "∞",
-      label: [`my previous ${ins.priorYears}`, "years combined"],
-    },
-    {
-      big: `${ins.current} days`,
-      label: ins.current > 0 && ins.current >= ins.longest ? ["streak, my longest", "yet and still going"] : ["current streak", `best: ${ins.longest} days`],
-    },
-    {
-      big: fmt(ins.repoStats.total),
-      label: [`${ORG} repos`, `${fmt(ins.repoStats.private)} private · ${fmt(ins.repoStats.public)} public`],
-    },
+    { emoji: "✍️", big: fmt(ins.total), label: "commits" },
+    { emoji: "🔥", big: fmt(ins.streak), label: "day streak" },
+    { emoji: "🔒", big: fmt(ins.priv), label: "private repos" },
+    { emoji: "🌍", big: fmt(ins.pub), label: "public repos" },
   ];
-  const tileY = 108;
-  const tileH = 112;
-  const gap = 12;
-  const tileW = (W - 64 - gap * (tiles.length - 1)) / tiles.length;
+  const gap = 14;
+  const tw = (W - 64 - gap * 3) / 4;
   tiles.forEach((tile, i) => {
-    const x = 32 + i * (tileW + gap);
+    const x = 32 + i * (tw + gap);
     out.push(
-      `<rect x="${x}" y="${tileY}" width="${tileW}" height="${tileH}" rx="10" fill="${t.tile}" stroke="${t.border}"/>`,
-      `<text x="${x + 18}" y="${tileY + 46}" font-size="36" font-weight="700" fill="${tile.hot ? "url(#hot)" : t.text}">${esc(tile.big)}${tile.suffix ? `<tspan dx="6" font-size="14" font-weight="500" fill="${t.muted}">${esc(tile.suffix)}</tspan>` : ""}</text>`,
-      `<text x="${x + 18}" y="${tileY + 74}" font-size="15" fill="${t.muted}">${tile.label.map((l, li) => `<tspan x="${x + 18}" dy="${li ? 19 : 0}">${esc(l)}</tspan>`).join("")}</text>`
+      `<rect x="${x}" y="28" width="${tw}" height="112" rx="16" fill="${t.tiles[i]}"/>`,
+      `<text x="${x + 20}" y="62" font-size="22">${tile.emoji}</text>`,
+      `<text x="${x + 20}" y="106" font-size="38" font-weight="800" fill="${t.text}">${esc(tile.big)}</text>`,
+      `<text x="${x + 20}" y="128" font-size="15" fill="${t.muted}">${esc(tile.label)}</text>`
     );
   });
 
-  // Chart
+  // Chart: one chunky bar per year
   const cx = 32;
   const cw = W - 64;
-  const top = 262;
-  const base = 458;
+  const base = 410;
+  const top = 200;
   const ch = base - top;
-  const n = data.monthly.length;
+  const n = ins.years.length;
   const slot = cw / n;
-  const barW = Math.max(1.5, slot * 0.72);
-  const max = Math.max(1, ...data.monthly.map((m) => m.commits));
-  const recentStart = n - 12;
+  const bw = Math.min(40, slot * 0.66);
+  const max = Math.max(1, ...ins.years.map((y) => y.commits));
+  const boomIdx = ins.years.findIndex((y) => y.year === ins.boom);
+  const barH = (c) => Math.max(6, (c / max) * ch);
 
-  out.push(`<line x1="${cx}" y1="${base + 0.5}" x2="${cx + cw}" y2="${base + 0.5}" stroke="${t.faint}"/>`);
+  out.push(`<text x="${cx}" y="180" font-size="15" font-weight="600" fill="${t.muted}">Commits per year</text>`);
 
-  data.monthly.forEach((m, i) => {
-    if (!m.commits) return;
-    const h = Math.max(2, (m.commits / max) * ch);
-    const x = cx + i * slot + (slot - barW) / 2;
-    const fill = i >= recentStart ? "url(#hot)" : t.old;
-    out.push(`<rect x="${x.toFixed(2)}" y="${(base - h).toFixed(2)}" width="${barW.toFixed(2)}" height="${h.toFixed(2)}" rx="1" fill="${fill}"/>`);
+  ins.years.forEach((y, i) => {
+    const hot = boomIdx !== -1 && i >= boomIdx;
+    const h = barH(y.commits);
+    const x = cx + i * slot + (slot - bw) / 2;
+    out.push(
+      `<rect x="${x.toFixed(1)}" y="${(base - h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="${Math.min(10, bw / 2, h / 2).toFixed(1)}" fill="${hot ? "url(#hot)" : t.quiet}"/>`,
+      `<text x="${(x + bw / 2).toFixed(1)}" y="${base + 24}" font-size="13.5" text-anchor="middle" fill="${t.muted}">${hot ? y.year : `'${String(y.year).slice(2)}`}</text>`
+    );
+    if (!hot) {
+      out.push(
+        `<text x="${(x + bw / 2).toFixed(1)}" y="${(base - h - 7).toFixed(1)}" font-size="13" text-anchor="middle" fill="${t.muted}">${fmt(y.commits)}</text>`
+      );
+    }
   });
 
-  // Year labels every other year, plus the current one
-  const years = [...new Set(data.monthly.map((m) => m.month.slice(0, 4)))];
-  years.forEach((y, yi) => {
-    const idx = data.monthly.findIndex((m) => m.month.startsWith(y));
-    const isLast = yi === years.length - 1;
-    if (yi % 2 !== 0 && !isLast) return;
-    if (!isLast && yi === years.length - 2) return; // avoid crowding the final label
-    const x = cx + idx * slot;
-    out.push(`<text x="${x.toFixed(1)}" y="${base + 22}" font-size="13" fill="${t.muted}">${y}</text>`);
-  });
-
-  // Bracket over the quiet years
-  const leftEnd = cx + recentStart * slot - 8;
-  const bracketY = base - ch * 0.4;
-  out.push(
-    `<path d="M${cx} ${bracketY + 8} V${bracketY} H${leftEnd.toFixed(1)} V${bracketY + 8}" fill="none" stroke="${t.muted}" stroke-width="1" opacity="0.7"/>`,
-    `<text x="${((cx + leftEnd) / 2).toFixed(1)}" y="${bracketY - 10}" font-size="15" text-anchor="middle" fill="${t.muted}">${ins.priorFrom}–${ins.priorTo}: ${fmt(ins.prior)} commits in ${ins.priorYears} years, all together</text>`
-  );
-
-  // Label the best month
-  const bi = data.monthly.indexOf(ins.best);
-  const bx = cx + bi * slot + slot / 2;
-  const by = base - (ins.best.commits / max) * ch;
-  out.push(
-    `<text x="${(bx - 8).toFixed(1)}" y="${(by + 5).toFixed(1)}" font-size="15" font-weight="600" text-anchor="end" fill="${t.text}">${monthLabel(ins.best.month)}: ${fmt(ins.best.commits)} commits →</text>`
-  );
-
-  // Footer
-  const updated = now.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
-  const footer = [
-    ins.reposCommittedTo != null ? `${fmt(ins.reposCommittedTo)} repos committed to in the last year` : null,
-    `${fmt(ins.repoStats.active30)} ${ORG} repos active in the last 30 days`,
-  ]
-    .filter(Boolean)
-    .join("  ·  ");
-  out.push(
-    `<text x="32" y="${H - 26}" font-size="14" fill="${t.muted}">${esc(footer)}</text>`,
-    `<text x="${W - 32}" y="${H - 26}" font-size="14" text-anchor="end" fill="${t.muted}">Updated ${updated}</text>`
-  );
+  if (boomIdx > 0) {
+    // Snoozing over the quiet years
+    const quietEnd = cx + boomIdx * slot;
+    out.push(
+      `<text x="${((cx + quietEnd) / 2).toFixed(1)}" y="${(base - ch * 0.42).toFixed(1)}" font-size="22" text-anchor="middle" fill="${t.muted}">💤 <tspan font-style="italic">zzz</tspan></text>`
+    );
+    // The big moment
+    const b = ins.years[boomIdx];
+    const bx = cx + boomIdx * slot + slot / 2;
+    const by = base - barH(b.commits);
+    const lx = bx - 150;
+    const ly = by + 34;
+    const left = bx - bw / 2;
+    out.push(
+      `<text x="${lx}" y="${ly}" font-size="18" font-weight="700" text-anchor="end" fill="${t.text}">🤖 met my clanker</text>`,
+      `<text x="${lx}" y="${ly + 22}" font-size="14" text-anchor="end" fill="${t.muted}">${fmt(b.commits)} commits in ${b.year}${b.year === ins.thisYear ? " so far" : ""}</text>`,
+      `<path d="M${lx + 10} ${ly - 8} Q ${bx - 70} ${by - 14} ${left - 10} ${by + 6}" fill="none" stroke="${t.muted}" stroke-width="2" stroke-linecap="round" stroke-dasharray="1 6"/>`,
+      `<path d="M${left - 20} ${by - 1} L ${left - 9} ${by + 6} L ${left - 18} ${by + 15}" fill="none" stroke="${t.muted}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`
+    );
+  }
 
   out.push(`</svg>`);
   return out.join("\n");
@@ -325,15 +254,12 @@ function renderSvg(data, ins, theme, now) {
 
 async function main() {
   const now = process.env.NOW ? new Date(process.env.NOW) : new Date();
-  const data = await loadData(now);
-  const ins = insights(data, now);
+  const ins = insights(await loadData(now), now);
   await mkdir(OUT_DIR, { recursive: true });
   for (const theme of Object.keys(THEMES)) {
-    await writeFile(`${OUT_DIR}/stats-${theme}.svg`, renderSvg(data, ins, theme, now));
+    await writeFile(`${OUT_DIR}/stats-${theme}.svg`, renderSvg(ins, theme));
   }
-  console.log(
-    `Done: ${fmt(ins.last12)} commits in 12 months, ${fmt(ins.prior)} before, ${ins.repoStats.total} ${ORG} repos.`
-  );
+  console.log(`Done: ${fmt(ins.total)} commits, ${ins.streak}-day streak, ${ins.priv} private / ${ins.pub} public repos.`);
 }
 
 main().catch((err) => {
