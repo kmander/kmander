@@ -4,7 +4,7 @@
 <text x="32" y="54" font-size="30" font-weight="700" fill="#f0f6fc">Years of almost nothing. Then vibe coding.</text>
 <text x="32" y="84" font-size="16" fill="#9198a1">Commits per month since 2011, public and private. AI writes the code, I keep shipping.</text>
 <rect x="32" y="108" width="195" height="112" rx="10" fill="#161b22" stroke="#30363d"/>
-<text x="50" y="154" font-size="36" font-weight="700" fill="url(#hot)">2,583</text>
+<text x="50" y="154" font-size="36" font-weight="700" fill="url(#hot)">2,584</text>
 <text x="50" y="182" font-size="15" fill="#9198a1"><tspan x="50" dy="0">commits in the</tspan><tspan x="50" dy="19">last 12 months</tspan></text>
 <rect x="239" y="108" width="195" height="112" rx="10" fill="#161b22" stroke="#30363d"/>
 <text x="257" y="154" font-size="36" font-weight="700" fill="#f0f6fc">1.8×</text>
@@ -144,7 +144,7 @@
 <rect x="831.51" y="437.19" width="3.08" height="20.81" rx="1" fill="url(#hot)"/>
 <rect x="835.78" y="406.54" width="3.08" height="51.46" rx="1" fill="url(#hot)"/>
 <rect x="840.05" y="262.00" width="3.08" height="196.00" rx="1" fill="url(#hot)"/>
-<rect x="844.33" y="338.04" width="3.08" height="119.96" rx="1" fill="url(#hot)"/>
+<rect x="844.33" y="337.88" width="3.08" height="120.12" rx="1" fill="url(#hot)"/>
 <text x="32.0" y="480" font-size="13" fill="#9198a1">2011</text>
 <text x="134.5" y="480" font-size="13" fill="#9198a1">2013</text>
 <text x="237.1" y="480" font-size="13" fill="#9198a1">2015</text>
