@@ -210,7 +210,7 @@ const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 function renderSvg(data, ins, theme, now) {
   const t = THEMES[theme];
   const W = 880;
-  const H = 492;
+  const H = 540;
   const font = `font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif"`;
   const out = [];
 
@@ -222,45 +222,44 @@ function renderSvg(data, ins, theme, now) {
 
   // Headline
   out.push(
-    `<text x="32" y="50" font-size="24" font-weight="700" fill="${t.text}">Years of almost nothing. Then vibe coding.</text>`,
-    `<text x="32" y="74" font-size="13" fill="${t.muted}">Commits per month since ${ins.priorFrom}, across public and private repos. I don't write the code, AI does. I just keep shipping.</text>`
+    `<text x="32" y="54" font-size="30" font-weight="700" fill="${t.text}">Years of almost nothing. Then vibe coding.</text>`,
+    `<text x="32" y="84" font-size="16" fill="${t.muted}">Commits per month since ${ins.priorFrom}, public and private. AI writes the code, I keep shipping.</text>`
   );
 
   // Stat tiles
   const tiles = [
-    { big: fmt(ins.last12), label: "commits in the last 12 months", hot: true },
+    { big: fmt(ins.last12), label: ["commits in the", "last 12 months"], hot: true },
     {
       big: ins.multiple ? `${ins.multiple >= 10 ? fmt(ins.multiple) : ins.multiple.toFixed(1)}×` : "∞",
-      label: `my previous ${ins.priorYears} years combined`,
+      label: [`my previous ${ins.priorYears}`, "years combined"],
     },
     {
       big: `${ins.current} days`,
-      label: ins.current > 0 && ins.current >= ins.longest ? "streak, longest yet, still going" : `current streak (best: ${ins.longest})`,
+      label: ins.current > 0 && ins.current >= ins.longest ? ["streak, my longest", "yet and still going"] : ["current streak", `best: ${ins.longest} days`],
     },
     {
       big: fmt(ins.repoStats.total),
-      suffix: `${ORG} repos`,
-      label: `${fmt(ins.repoStats.private)} private · ${fmt(ins.repoStats.public)} public`,
+      label: [`${ORG} repos`, `${fmt(ins.repoStats.private)} private · ${fmt(ins.repoStats.public)} public`],
     },
   ];
-  const tileY = 96;
-  const tileH = 78;
+  const tileY = 108;
+  const tileH = 112;
   const gap = 12;
   const tileW = (W - 64 - gap * (tiles.length - 1)) / tiles.length;
   tiles.forEach((tile, i) => {
     const x = 32 + i * (tileW + gap);
     out.push(
       `<rect x="${x}" y="${tileY}" width="${tileW}" height="${tileH}" rx="10" fill="${t.tile}" stroke="${t.border}"/>`,
-      `<text x="${x + 16}" y="${tileY + 40}" font-size="28" font-weight="700" fill="${tile.hot ? "url(#hot)" : t.text}">${esc(tile.big)}${tile.suffix ? `<tspan dx="6" font-size="14" font-weight="500" fill="${t.muted}">${esc(tile.suffix)}</tspan>` : ""}</text>`,
-      `<text x="${x + 16}" y="${tileY + 62}" font-size="11.5" fill="${t.muted}">${esc(tile.label)}</text>`
+      `<text x="${x + 18}" y="${tileY + 46}" font-size="36" font-weight="700" fill="${tile.hot ? "url(#hot)" : t.text}">${esc(tile.big)}${tile.suffix ? `<tspan dx="6" font-size="14" font-weight="500" fill="${t.muted}">${esc(tile.suffix)}</tspan>` : ""}</text>`,
+      `<text x="${x + 18}" y="${tileY + 74}" font-size="15" fill="${t.muted}">${tile.label.map((l, li) => `<tspan x="${x + 18}" dy="${li ? 19 : 0}">${esc(l)}</tspan>`).join("")}</text>`
     );
   });
 
   // Chart
   const cx = 32;
   const cw = W - 64;
-  const top = 226;
-  const base = 410;
+  const top = 262;
+  const base = 458;
   const ch = base - top;
   const n = data.monthly.length;
   const slot = cw / n;
@@ -286,15 +285,15 @@ function renderSvg(data, ins, theme, now) {
     if (yi % 2 !== 0 && !isLast) return;
     if (!isLast && yi === years.length - 2) return; // avoid crowding the final label
     const x = cx + idx * slot;
-    out.push(`<text x="${x.toFixed(1)}" y="${base + 20}" font-size="11" fill="${t.muted}">${y}</text>`);
+    out.push(`<text x="${x.toFixed(1)}" y="${base + 22}" font-size="13" fill="${t.muted}">${y}</text>`);
   });
 
   // Bracket over the quiet years
   const leftEnd = cx + recentStart * slot - 8;
-  const bracketY = base - ch * 0.36;
+  const bracketY = base - ch * 0.4;
   out.push(
     `<path d="M${cx} ${bracketY + 8} V${bracketY} H${leftEnd.toFixed(1)} V${bracketY + 8}" fill="none" stroke="${t.muted}" stroke-width="1" opacity="0.7"/>`,
-    `<text x="${((cx + leftEnd) / 2).toFixed(1)}" y="${bracketY - 10}" font-size="12.5" text-anchor="middle" fill="${t.muted}">${ins.priorFrom}–${ins.priorTo}: ${fmt(ins.prior)} commits in ${ins.priorYears} years, all together</text>`
+    `<text x="${((cx + leftEnd) / 2).toFixed(1)}" y="${bracketY - 10}" font-size="15" text-anchor="middle" fill="${t.muted}">${ins.priorFrom}–${ins.priorTo}: ${fmt(ins.prior)} commits in ${ins.priorYears} years, all together</text>`
   );
 
   // Label the best month
@@ -302,20 +301,21 @@ function renderSvg(data, ins, theme, now) {
   const bx = cx + bi * slot + slot / 2;
   const by = base - (ins.best.commits / max) * ch;
   out.push(
-    `<text x="${(bx - 8).toFixed(1)}" y="${(by + 4).toFixed(1)}" font-size="12.5" font-weight="600" text-anchor="end" fill="${t.text}">${monthLabel(ins.best.month)}: ${fmt(ins.best.commits)} commits →</text>`
+    `<text x="${(bx - 8).toFixed(1)}" y="${(by + 5).toFixed(1)}" font-size="15" font-weight="600" text-anchor="end" fill="${t.text}">${monthLabel(ins.best.month)}: ${fmt(ins.best.commits)} commits →</text>`
   );
 
-  // Footer insight line
+  // Footer
   const updated = now.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
   const footer = [
     ins.reposCommittedTo != null ? `${fmt(ins.reposCommittedTo)} repos committed to in the last year` : null,
-    `${fmt(ins.repoStats.active30)} ${ORG} repos pushed to in the last 30 days`,
-    `busiest on ${ins.busiestDay}`,
-    `updated ${updated}`,
+    `${fmt(ins.repoStats.active30)} ${ORG} repos active in the last 30 days`,
   ]
     .filter(Boolean)
     .join("  ·  ");
-  out.push(`<text x="32" y="${H - 22}" font-size="11.5" fill="${t.muted}">${esc(footer)}</text>`);
+  out.push(
+    `<text x="32" y="${H - 26}" font-size="14" fill="${t.muted}">${esc(footer)}</text>`,
+    `<text x="${W - 32}" y="${H - 26}" font-size="14" text-anchor="end" fill="${t.muted}">Updated ${updated}</text>`
+  );
 
   out.push(`</svg>`);
   return out.join("\n");
