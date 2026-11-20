@@ -1,0 +1,38 @@
+name: Update profile stats
+
+on:
+  schedule:
+    - cron: "17 21 * * *" # daily, 06:17 Tokyo time
+  workflow_dispatch: # lets you run it by hand from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build the stats card
+        run: node scripts/update-stats.mjs
+        env:
+          STATS_TOKEN: ${{ secrets.STATS_TOKEN }}
+          GH_LOGIN: ${{ github.repository_owner }}
+          STATS_ORG: YucaApp
+
+      - name: Commit if anything changed
+        run: |
+          git add assets
+          if git diff --cached --quiet; then
+            echo "No changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update profile stats"
+          git push
