@@ -178,7 +178,7 @@ function renderSvg(ins, theme) {
 
   // Tiles
   const tiles = [
-    { emoji: "📤", big: fmt(ins.total), label: "commits" },
+    { emoji: "🚀", big: fmt(ins.total), label: "commits" },
     { emoji: "🔥", big: fmt(ins.streak), label: "day streak" },
     { emoji: "🔒", big: fmt(ins.priv), label: "private repos" },
     { emoji: "🌍", big: fmt(ins.pub), label: "public repos" },
