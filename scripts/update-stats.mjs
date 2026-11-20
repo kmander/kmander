@@ -178,7 +178,7 @@ function renderSvg(ins, theme) {
 
   // Tiles
   const tiles = [
-    { emoji: "✍️", big: fmt(ins.total), label: "commits" },
+    { emoji: "🚀", big: fmt(ins.total), label: "commits" },
     { emoji: "🔥", big: fmt(ins.streak), label: "day streak" },
     { emoji: "🔒", big: fmt(ins.priv), label: "private repos" },
     { emoji: "🌍", big: fmt(ins.pub), label: "public repos" },
@@ -188,10 +188,10 @@ function renderSvg(ins, theme) {
   tiles.forEach((tile, i) => {
     const x = 32 + i * (tw + gap);
     out.push(
-      `<rect x="${x}" y="28" width="${tw}" height="112" rx="16" fill="${t.tiles[i]}"/>`,
-      `<text x="${x + 20}" y="62" font-size="22">${tile.emoji}</text>`,
-      `<text x="${x + 20}" y="106" font-size="38" font-weight="800" fill="${t.text}">${esc(tile.big)}</text>`,
-      `<text x="${x + 20}" y="128" font-size="15" fill="${t.muted}">${esc(tile.label)}</text>`
+      `<rect x="${x}" y="28" width="${tw}" height="126" rx="16" fill="${t.tiles[i]}"/>`,
+      `<text x="${x + 18}" y="72" font-size="34">${tile.emoji}</text>`,
+      `<text x="${x + 20}" y="118" font-size="38" font-weight="800" fill="${t.text}">${esc(tile.big)}</text>`,
+      `<text x="${x + 20}" y="141" font-size="15" fill="${t.muted}">${esc(tile.label)}</text>`
     );
   });
 
@@ -199,7 +199,7 @@ function renderSvg(ins, theme) {
   const cx = 32;
   const cw = W - 64;
   const base = 410;
-  const top = 200;
+  const top = 210;
   const ch = base - top;
   const n = ins.years.length;
   const slot = cw / n;
@@ -208,7 +208,7 @@ function renderSvg(ins, theme) {
   const boomIdx = ins.years.findIndex((y) => y.year === ins.boom);
   const barH = (c) => Math.max(6, (c / max) * ch);
 
-  out.push(`<text x="${cx}" y="180" font-size="15" font-weight="600" fill="${t.muted}">Commits per year</text>`);
+  out.push(`<text x="${cx}" y="190" font-size="15" font-weight="600" fill="${t.muted}">Commits per year</text>`);
 
   ins.years.forEach((y, i) => {
     const hot = boomIdx !== -1 && i >= boomIdx;
