@@ -23,7 +23,7 @@ jobs:
         env:
           STATS_TOKEN: ${{ secrets.STATS_TOKEN }}
           GH_LOGIN: ${{ github.repository_owner }}
-          STATS_ORG: YucaApp
+          STATS_ORG: bagels-io
 
       - name: Commit if anything changed
         run: |
