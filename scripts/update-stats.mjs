@@ -60,10 +60,10 @@ async function fetchUser() {
   return user;
 }
 
-// Every repo in the org, plus the ones on the personal account.
+// Every repo in the org (the profile repo itself isn't counted).
 async function fetchRepos() {
   const repos = [];
-  for (const [owner, field] of [[ORG, "organization"], [LOGIN, "user"]]) {
+  for (const [owner, field] of [[ORG, "organization"]]) {
     let after = null;
     do {
       const data = await gql(
