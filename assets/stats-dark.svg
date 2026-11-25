@@ -3,7 +3,7 @@
 <rect x="0.5" y="0.5" width="879" height="469" rx="20" fill="#0d1117" stroke="#30363d"/>
 <rect x="32" y="28" width="193.5" height="126" rx="16" fill="#2a1f3d"/>
 <text x="50" y="72" font-size="34">🚀</text>
-<text x="52" y="118" font-size="38" font-weight="800" fill="#f0f6fc">4,214</text>
+<text x="52" y="118" font-size="38" font-weight="800" fill="#f0f6fc">4,217</text>
 <text x="52" y="141" font-size="15" fill="#9198a1">commits</text>
 <rect x="239.5" y="28" width="193.5" height="126" rx="16" fill="#3a2418"/>
 <text x="257.5" y="72" font-size="34">🔥</text>
@@ -24,9 +24,9 @@
 <rect x="91.7" y="394.5" width="33.7" height="15.5" rx="7.8" fill="#3a3f4b"/>
 <text x="108.5" y="434" font-size="13.5" text-anchor="middle" fill="#9198a1">'12</text>
 <text x="108.5" y="387.5" font-size="13" text-anchor="middle" fill="#9198a1">216</text>
-<rect x="142.7" y="388.9" width="33.7" height="21.1" rx="10.0" fill="#3a3f4b"/>
+<rect x="142.7" y="389.0" width="33.7" height="21.0" rx="10.0" fill="#3a3f4b"/>
 <text x="159.5" y="434" font-size="13.5" text-anchor="middle" fill="#9198a1">'13</text>
-<text x="159.5" y="381.9" font-size="13" text-anchor="middle" fill="#9198a1">293</text>
+<text x="159.5" y="382.0" font-size="13" text-anchor="middle" fill="#9198a1">293</text>
 <rect x="193.7" y="404.0" width="33.7" height="6.0" rx="3.0" fill="#3a3f4b"/>
 <text x="210.5" y="434" font-size="13.5" text-anchor="middle" fill="#9198a1">'14</text>
 <text x="210.5" y="397.0" font-size="13" text-anchor="middle" fill="#9198a1">20</text>
@@ -67,7 +67,7 @@
 <text x="822.5" y="434" font-size="13.5" text-anchor="middle" fill="#9198a1">2026</text>
 <text x="414.5" y="326.0" font-size="22" text-anchor="middle" fill="#9198a1">💤 <tspan font-style="italic">zzz</tspan></text>
 <text x="672.5" y="244" font-size="18" font-weight="700" text-anchor="end" fill="#f0f6fc">🤖 met my clanker</text>
-<text x="672.5" y="266" font-size="14" text-anchor="end" fill="#9198a1">2,781 commits in 2026 so far</text>
+<text x="672.5" y="266" font-size="14" text-anchor="end" fill="#9198a1">2,784 commits in 2026 so far</text>
 <path d="M682.5 236 Q 752.5 196 795.67 216" fill="none" stroke="#9198a1" stroke-width="2" stroke-linecap="round" stroke-dasharray="1 6"/>
 <path d="M785.67 209 L 796.67 216 L 787.67 225" fill="none" stroke="#9198a1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
